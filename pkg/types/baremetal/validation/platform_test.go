@@ -481,6 +481,257 @@ func TestValidatePlatform(t *testing.T) {
 			network:  network,
 			expected: "Invalid value: \"192.168.128.1\": \"192.168.128.1\" is not in the provisioning network",
 		},
+
+		// ******************************************************************************************************************
+
+		{
+			name: "duplicate_bmc",
+			platform: &baremetal.Platform{
+				APIVIP:     "192.168.111.2",
+				DNSVIP:     "192.168.111.3",
+				IngressVIP: "192.168.111.4",
+				Hosts: []*baremetal.Host{
+					{
+						Name: "host1",
+						BootMACAddress: "CA:FE:CA:FE:CA:FE",
+						BMC: baremetal.BMC{
+							Username: "root",
+							Password: "password",
+							Address:  "ipmi://192.168.111.1",
+						},
+					},
+					{
+						Name: "host2",
+						BootMACAddress: "CA:FE:CA:FE:CA:FF",
+						BMC: baremetal.BMC{
+							Username: "root",
+							Password: "password",
+							Address:  "ipmi://192.168.111.1",
+						},
+					},
+				},
+				LibvirtURI:                   "qemu://system",
+				ProvisioningNetworkCIDR:      ipnet.MustParseCIDR("172.22.0.0/24"),
+				ClusterProvisioningIP:        "172.22.0.3",
+				BootstrapProvisioningIP:      "172.22.0.2",
+				ExternalBridge:               "br0",
+				ProvisioningBridge:           "br1",
+				ProvisioningNetworkInterface: "ens3",
+			},
+			network:  network,
+			expected: "Invalid value: \"ipmi://192.168.111.1\": duplicate Host.BMC.Address already in use",
+		},
+		{
+			name: "duplicate_host_name",
+			platform: &baremetal.Platform{
+				APIVIP:     "192.168.111.2",
+				DNSVIP:     "192.168.111.3",
+				IngressVIP: "192.168.111.4",
+				Hosts: []*baremetal.Host{
+					{
+						Name: "host1",
+						BootMACAddress: "CA:FE:CA:FE:CA:FE",
+						BMC: baremetal.BMC{
+							Username: "root",
+							Password: "password",
+							Address:  "ipmi://192.168.111.1",
+						},
+					},
+					{
+						Name: "host1",
+						BootMACAddress: "CA:FE:CA:FE:CA:FF",
+						BMC: baremetal.BMC{
+							Username: "root",
+							Password: "password",
+							Address:  "ipmi://192.168.111.2",
+						},
+					},
+				},
+				LibvirtURI:                   "qemu://system",
+				ProvisioningNetworkCIDR:      ipnet.MustParseCIDR("172.22.0.0/24"),
+				ClusterProvisioningIP:        "172.22.0.3",
+				BootstrapProvisioningIP:      "172.22.0.2",
+				ExternalBridge:               "br0",
+				ProvisioningBridge:           "br1",
+				ProvisioningNetworkInterface: "ens3",
+			},
+			network:  network,
+			expected: "Invalid value: \"host1\": duplicate Host.Name already in use",
+		},
+		{
+			name: "duplicate_host_mac",
+			platform: &baremetal.Platform{
+				APIVIP:     "192.168.111.2",
+				DNSVIP:     "192.168.111.3",
+				IngressVIP: "192.168.111.4",
+				Hosts: []*baremetal.Host{
+					{
+						Name:           "host1",
+						BootMACAddress: "CA:FE:CA:FE:CA:FE",
+						BMC: baremetal.BMC{
+							Username: "root",
+							Password: "password",
+							Address:  "ipmi://192.168.111.1",
+						},
+					},
+					{
+						Name:           "host2",
+						BootMACAddress: "CA:FE:CA:FE:CA:FE",
+						BMC: baremetal.BMC{
+							Username: "root",
+							Password: "password",
+							Address:  "ipmi://192.168.111.2",
+						},
+					},
+				},
+				LibvirtURI:                   "qemu://system",
+				ProvisioningNetworkCIDR:      ipnet.MustParseCIDR("172.22.0.0/24"),
+				ClusterProvisioningIP:        "172.22.0.3",
+				BootstrapProvisioningIP:      "172.22.0.2",
+				ExternalBridge:               "br0",
+				ProvisioningBridge:           "br1",
+				ProvisioningNetworkInterface: "ens3",
+			},
+			network:  network,
+			expected: "Invalid value: \"CA:FE:CA:FE:CA:FE\": duplicate Host.BootMACAddress already in use",
+		},
+		{
+			name: "missing_name",
+			platform: &baremetal.Platform{
+				APIVIP:     "192.168.111.2",
+				DNSVIP:     "192.168.111.3",
+				IngressVIP: "192.168.111.4",
+				Hosts: []*baremetal.Host{
+					{
+						BootMACAddress: "CA:FE:CA:FE:CA:FE",
+						BMC: baremetal.BMC{
+							Username: "root",
+							Password: "password",
+							Address:  "ipmi://192.168.111.1",
+						},
+					},
+				},
+				LibvirtURI:                   "qemu://system",
+				ProvisioningNetworkCIDR:      ipnet.MustParseCIDR("172.22.0.0/24"),
+				ClusterProvisioningIP:        "172.22.0.3",
+				BootstrapProvisioningIP:      "172.22.0.2",
+				ExternalBridge:               "br0",
+				ProvisioningBridge:           "br1",
+				ProvisioningNetworkInterface: "ens3",
+			},
+			network:  network,
+			expected: "Invalid value: \"\": Host.Name is required",
+		},
+		{
+			name: "missing_mac",
+			platform: &baremetal.Platform{
+				APIVIP:     "192.168.111.2",
+				DNSVIP:     "192.168.111.3",
+				IngressVIP: "192.168.111.4",
+				Hosts: []*baremetal.Host{
+					{
+						Name: "host1",
+						BMC: baremetal.BMC{
+							Username: "root",
+							Password: "password",
+							Address:  "ipmi://192.168.111.1",
+						},
+					},
+				},
+				LibvirtURI:                   "qemu://system",
+				ProvisioningNetworkCIDR:      ipnet.MustParseCIDR("172.22.0.0/24"),
+				ClusterProvisioningIP:        "172.22.0.3",
+				BootstrapProvisioningIP:      "172.22.0.2",
+				ExternalBridge:               "br0",
+				ProvisioningBridge:           "br1",
+				ProvisioningNetworkInterface: "ens3",
+			},
+			network:  network,
+			expected: "Invalid value: \"\": Host.BootMACAddress is required",
+		},
+		{
+			name: "missing_bmc_address",
+			platform: &baremetal.Platform{
+				APIVIP:     "192.168.111.2",
+				DNSVIP:     "192.168.111.3",
+				IngressVIP: "192.168.111.4",
+				Hosts: []*baremetal.Host{
+					{
+						Name: "host1",
+						BootMACAddress: "CA:FE:CA:FE:CA:FE",
+						BMC: baremetal.BMC{
+							Username: "root",
+							Password: "password",
+						},
+					},
+				},
+				LibvirtURI:                   "qemu://system",
+				ProvisioningNetworkCIDR:      ipnet.MustParseCIDR("172.22.0.0/24"),
+				ClusterProvisioningIP:        "172.22.0.3",
+				BootstrapProvisioningIP:      "172.22.0.2",
+				ExternalBridge:               "br0",
+				ProvisioningBridge:           "br1",
+				ProvisioningNetworkInterface: "ens3",
+			},
+			network:  network,
+			expected: "Invalid value: \"\": Host.BMC.Address is required",
+		},
+		{
+			name: "missing_bmc_username",
+			platform: &baremetal.Platform{
+				APIVIP:     "192.168.111.2",
+				DNSVIP:     "192.168.111.3",
+				IngressVIP: "192.168.111.4",
+				Hosts: []*baremetal.Host{
+					{
+						Name: "host1",
+						BootMACAddress: "CA:FE:CA:FE:CA:FE",
+						BMC: baremetal.BMC{
+							//Username: "root",
+							Password: "password",
+							Address:  "ipmi://192.168.111.1",
+						},
+					},
+				},
+				LibvirtURI:                   "qemu://system",
+				ProvisioningNetworkCIDR:      ipnet.MustParseCIDR("172.22.0.0/24"),
+				ClusterProvisioningIP:        "172.22.0.3",
+				BootstrapProvisioningIP:      "172.22.0.2",
+				ExternalBridge:               "br0",
+				ProvisioningBridge:           "br1",
+				ProvisioningNetworkInterface: "ens3",
+			},
+			network:  network,
+			expected: "Invalid value: \"\": Host.BMC.Username is required",
+		},
+		{
+			name: "missing_bmc_password",
+			platform: &baremetal.Platform{
+				APIVIP:     "192.168.111.2",
+				DNSVIP:     "192.168.111.3",
+				IngressVIP: "192.168.111.4",
+				Hosts: []*baremetal.Host{
+					{
+						Name: "host1",
+						BootMACAddress: "CA:FE:CA:FE:CA:FE",
+						BMC: baremetal.BMC{
+							Username: "root",
+							//Password: "password",
+							Address:  "ipmi://192.168.111.1",
+						},
+					},
+				},
+				LibvirtURI:                   "qemu://system",
+				ProvisioningNetworkCIDR:      ipnet.MustParseCIDR("172.22.0.0/24"),
+				ClusterProvisioningIP:        "172.22.0.3",
+				BootstrapProvisioningIP:      "172.22.0.2",
+				ExternalBridge:               "br0",
+				ProvisioningBridge:           "br1",
+				ProvisioningNetworkInterface: "ens3",
+			},
+			network:  network,
+			expected: "Invalid value: \"\": Host.BMC.Password is required",
+		},
 	}
 
 	for _, tc := range cases {

@@ -10,6 +10,8 @@ import (
 	"github.com/openshift/installer/pkg/validate"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"strings"
+
+	"github.com/go-playground/validator/v10"
 )
 
 // dynamicValidator is a function that validates certain fields in the platform.
@@ -59,6 +61,49 @@ func validateOSImageURI(uri string) error {
 		return fmt.Errorf("the URI provided: %s must begin with http/https", uri)
 	}
 	return nil
+}
+
+// validateHosts checks that hosts have all required fields set with appropriate values
+func validateHosts(hosts []*baremetal.Host, fldPath *field.Path) field.ErrorList {
+	hostErrs := field.ErrorList{}
+
+	values := make(map[string]map[interface{}]struct{})
+
+	//Initialize a new validator and register a custom validation rule for the tag `uniqueField`
+	validate := validator.New()
+	validate.RegisterValidation("uniqueField", func (fl validator.FieldLevel) bool {
+		valueFound := false
+		fieldName := fl.Parent().Type().Name() + "." + fl.FieldName()
+		fieldValue := fl.Field().Interface()			
+
+		if fl.Field().Type().Comparable() {
+			if _, present := values[fieldName]; !present {
+				values[fieldName] = make(map[interface{}]struct{})
+			}
+
+			fieldValues := values[fieldName]
+			if _, valueFound = fieldValues[fieldValue]; !valueFound {
+				fieldValues[fieldValue] = struct{}{}
+			} 
+		}
+		return !valueFound
+	})
+
+	//Apply validations and translate errors
+	for _, host := range hosts {
+		err := validate.Struct(host)
+		if err != nil {		
+			for _, err := range err.(validator.ValidationErrors) {								
+				if err.Tag() == "required" {
+					hostErrs = append(hostErrs, field.Invalid(fldPath.Child("hosts"), err.Value(), err.Namespace() + " is required"))
+				} else if err.Tag() == "uniqueField" {
+					hostErrs = append(hostErrs, field.Invalid(fldPath.Child("hosts"), err.Value(), fmt.Sprintf("duplicate %s already in use", err.Namespace())))
+				}
+			}			
+		}
+	}
+
+	return hostErrs
 }
 
 // ValidatePlatform checks that the specified platform is valid.
@@ -155,6 +200,8 @@ func ValidatePlatform(p *baremetal.Platform, n *types.Networking, fldPath *field
 			allErrs = append(allErrs, field.Invalid(fldPath.Child("clusterOSImage"), p.ClusterOSImage, err.Error()))
 		}
 	}
+
+	allErrs = append(allErrs, validateHosts(p.Hosts, fldPath)...)
 
 	for _, validator := range dynamicValidators {
 		allErrs = append(allErrs, validator(p, fldPath)...)
