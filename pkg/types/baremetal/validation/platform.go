@@ -4,12 +4,14 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"reflect"
+
+	"strings"
 
 	"github.com/openshift/installer/pkg/types"
 	"github.com/openshift/installer/pkg/types/baremetal"
 	"github.com/openshift/installer/pkg/validate"
 	"k8s.io/apimachinery/pkg/util/validation/field"
-	"strings"
 
 	"github.com/go-playground/validator/v10"
 )
@@ -71,10 +73,10 @@ func validateHosts(hosts []*baremetal.Host, fldPath *field.Path) field.ErrorList
 
 	//Initialize a new validator and register a custom validation rule for the tag `uniqueField`
 	validate := validator.New()
-	validate.RegisterValidation("uniqueField", func (fl validator.FieldLevel) bool {
+	validate.RegisterValidation("uniqueField", func(fl validator.FieldLevel) bool {
 		valueFound := false
 		fieldName := fl.Parent().Type().Name() + "." + fl.FieldName()
-		fieldValue := fl.Field().Interface()			
+		fieldValue := fl.Field().Interface()
 
 		if fl.Field().Type().Comparable() {
 			if _, present := values[fieldName]; !present {
@@ -84,22 +86,25 @@ func validateHosts(hosts []*baremetal.Host, fldPath *field.Path) field.ErrorList
 			fieldValues := values[fieldName]
 			if _, valueFound = fieldValues[fieldValue]; !valueFound {
 				fieldValues[fieldValue] = struct{}{}
-			} 
+			}
 		}
 		return !valueFound
 	})
 
 	//Apply validations and translate errors
-	for _, host := range hosts {
+	fldPath = fldPath.Child("hosts")
+
+	for idx, host := range hosts {
 		err := validate.Struct(host)
-		if err != nil {		
-			for _, err := range err.(validator.ValidationErrors) {								
+		if err != nil {
+			hostType := reflect.TypeOf(hosts).Elem().Elem().Name()
+			for _, err := range err.(validator.ValidationErrors) {
 				if err.Tag() == "required" {
-					hostErrs = append(hostErrs, field.Invalid(fldPath.Child("hosts"), err.Value(), err.Namespace() + " is required"))
+					hostErrs = append(hostErrs, field.Required(fldPath.Index(idx).Child(err.Namespace()[len(hostType)+1:]), "missing "+err.Field()))
 				} else if err.Tag() == "uniqueField" {
-					hostErrs = append(hostErrs, field.Invalid(fldPath.Child("hosts"), err.Value(), fmt.Sprintf("duplicate %s already in use", err.Namespace())))
+					hostErrs = append(hostErrs, field.Duplicate(fldPath.Index(idx).Child(err.Namespace()[len(hostType)+1:]), fmt.Sprintf("%s", err.Value())))
 				}
-			}			
+			}
 		}
 	}
 
