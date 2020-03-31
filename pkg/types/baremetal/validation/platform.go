@@ -1,6 +1,7 @@
 package validation
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"net/http"
@@ -116,14 +117,25 @@ func validateHosts(hosts []*baremetal.Host, fldPath *field.Path) field.ErrorList
 	return hostErrs
 }
 
+type contextKey int
+
+const (
+	key contextKey = iota
+)
+
+type validationContext struct {
+	uniqueValues map[string]map[interface{}]struct{}
+	customErrs   map[string]error
+}
+
 func validateWithTags(p *baremetal.Platform, fldPath *field.Path) field.ErrorList {
 	platformErrs := field.ErrorList{}
 
 	validate := validator.New()
 
-	values := make(map[string]map[interface{}]struct{})
-	customErrs := make(map[string]error)
-	validate.RegisterValidation("uniqueField", func(fl validator.FieldLevel) bool {
+	validate.RegisterValidationCtx("uniqueField", func(ctx context.Context, fl validator.FieldLevel) bool {
+		values := ctx.Value(key).(validationContext).uniqueValues
+
 		valueFound := false
 		fieldName := fl.Parent().Type().Name() + "." + fl.FieldName()
 		fieldValue := fl.Field().Interface()
@@ -143,20 +155,28 @@ func validateWithTags(p *baremetal.Platform, fldPath *field.Path) field.ErrorLis
 
 		return !valueFound
 	})
-	validate.RegisterValidation("osimageuri", func(fl validator.FieldLevel) bool {
+	validate.RegisterValidationCtx("osimageuri", func(ctx context.Context, fl validator.FieldLevel) bool {
+		customErrs := ctx.Value(key).(validationContext).customErrs
+
 		err := validateOSImageURI(fl.Field().String())
 		if err != nil {
 			customErrs[fl.FieldName()] = err
 		}
 		return err == nil
 	})
-	validate.RegisterValidation("urlexist", func(fl validator.FieldLevel) bool {
+	validate.RegisterValidationCtx("urlexist", func(ctx context.Context, fl validator.FieldLevel) bool {
 		if res, err := http.Head(fl.Field().String()); err == nil {
 			return res.StatusCode == http.StatusOK
 		}
 		return false
 	})
-	err := validate.Struct(p)
+
+	ctx := validationContext{
+		config:       c,
+		uniqueValues: make(map[string]map[interface{}]struct{}),
+		customErrs:   make(map[string]error),
+	}
+	err := validate.StructCtx(context.WithValue(context.Background(), key, ctx), p)
 
 	if err != nil {
 		baseType := reflect.TypeOf(p).Elem().Name()
@@ -168,7 +188,7 @@ func validateWithTags(p *baremetal.Platform, fldPath *field.Path) field.ErrorLis
 			case "uniqueField":
 				platformErrs = append(platformErrs, field.Duplicate(childName, err.Value()))
 			case "osimageuri":
-				platformErrs = append(platformErrs, field.Invalid(childName, err.Value(), customErrs[err.Field()].Error()))
+				platformErrs = append(platformErrs, field.Invalid(childName, err.Value(), ctx.customErrs[err.Field()].Error()))
 			case "urlexist":
 				platformErrs = append(platformErrs, field.NotFound(childName, err.Value()))
 			}
