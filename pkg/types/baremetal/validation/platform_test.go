@@ -272,7 +272,7 @@ func TestValidatePlatform(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			err := ValidatePlatform(tc.platform, network(), field.NewPath("baremetal")).ToAggregate()
+			err := ValidatePlatform(tc.platform, network(), field.NewPath("baremetal"), installConfig(tc.platform).build()).ToAggregate()
 			if tc.expected == "" {
 				assert.NoError(t, err)
 			} else {
@@ -440,4 +440,22 @@ func (pb *platformBuilder) ProvisioningNetworkInterface(value string) *platformB
 
 func network() *types.Networking {
 	return &types.Networking{MachineNetwork: []types.MachineNetworkEntry{{CIDR: *ipnet.MustParseCIDR("192.168.111.0/24")}}}
+}
+
+type installConfigBuilder struct {
+	types.InstallConfig
+}
+
+func installConfig(bp *baremetal.Platform) *installConfigBuilder {
+	return &installConfigBuilder{
+		InstallConfig: types.InstallConfig{
+			Platform: types.Platform{
+				BareMetal: bp,
+			},
+		},
+	}
+}
+
+func (icb *installConfigBuilder) build() *types.InstallConfig {
+	return &icb.InstallConfig
 }
