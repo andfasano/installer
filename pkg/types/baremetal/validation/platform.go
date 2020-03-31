@@ -116,12 +116,33 @@ func validateHosts(hosts []*baremetal.Host, fldPath *field.Path) field.ErrorList
 	return hostErrs
 }
 
-func validateOSImages(p *baremetal.Platform, fldPath *field.Path) field.ErrorList {
+func validateWithTags(p *baremetal.Platform, fldPath *field.Path) field.ErrorList {
 	platformErrs := field.ErrorList{}
 
 	validate := validator.New()
 
+	values := make(map[string]map[interface{}]struct{})
 	customErrs := make(map[string]error)
+	validate.RegisterValidation("uniqueField", func(fl validator.FieldLevel) bool {
+		valueFound := false
+		fieldName := fl.Parent().Type().Name() + "." + fl.FieldName()
+		fieldValue := fl.Field().Interface()
+
+		if fl.Field().Type().Comparable() {
+			if _, present := values[fieldName]; !present {
+				values[fieldName] = make(map[interface{}]struct{})
+			}
+
+			fieldValues := values[fieldName]
+			if _, valueFound = fieldValues[fieldValue]; !valueFound {
+				fieldValues[fieldValue] = struct{}{}
+			}
+		} else {
+			panic(fmt.Sprintf("Cannot apply validation rule 'uniqueField' on field %s", fl.FieldName()))
+		}
+
+		return !valueFound
+	})
 	validate.RegisterValidation("osimageuri", func(fl validator.FieldLevel) bool {
 		err := validateOSImageURI(fl.Field().String())
 		if err != nil {
@@ -142,6 +163,10 @@ func validateOSImages(p *baremetal.Platform, fldPath *field.Path) field.ErrorLis
 		for _, err := range err.(validator.ValidationErrors) {
 			childName := fldPath.Child(err.Namespace()[len(baseType)+1:])
 			switch err.Tag() {
+			case "required":
+				platformErrs = append(platformErrs, field.Required(childName, "missing "+err.Field()))
+			case "uniqueField":
+				platformErrs = append(platformErrs, field.Duplicate(childName, err.Value()))
 			case "osimageuri":
 				platformErrs = append(platformErrs, field.Invalid(childName, err.Value(), customErrs[err.Field()].Error()))
 			case "urlexist":
@@ -238,9 +263,7 @@ func ValidatePlatform(p *baremetal.Platform, n *types.Networking, fldPath *field
 		allErrs = append(allErrs, field.Invalid(fldPath.Child("bootstrapHostIP"), p.BootstrapProvisioningIP, err.Error()))
 	}
 
-	allErrs = append(allErrs, validateOSImages(p, fldPath)...)
-
-	allErrs = append(allErrs, validateHosts(p.Hosts, fldPath)...)
+	allErrs = append(allErrs, validateWithTags(p, fldPath)...)
 
 	for _, validator := range dynamicValidators {
 		allErrs = append(allErrs, validator(p, fldPath)...)

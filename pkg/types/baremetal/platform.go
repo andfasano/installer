@@ -71,7 +71,7 @@ type Platform struct {
 	ProvisioningDHCPRange string `json:"provisioningDHCPRange,omitempty"`
 
 	// Hosts is the information needed to create the objects in Ironic.
-	Hosts []*Host `json:"hosts"`
+	Hosts []*Host `json:"hosts" validate:"omitempty,dive"`
 
 	// DefaultMachinePlatform is the default configuration used when
 	// installing on bare metal for machine pools which do not define their own

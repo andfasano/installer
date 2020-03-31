@@ -220,25 +220,25 @@ func TestValidatePlatform(t *testing.T) {
 				Hosts(
 					host1().BMCAddress("ipmi://192.168.111.1").build(),
 					host2().BMCAddress("ipmi://192.168.111.1").build()).build(),
-			expected: "baremetal.hosts\\[1\\].BMC.Address: Duplicate value: \"ipmi://192.168.111.1\"",
+			expected: "baremetal.Hosts\\[1\\].BMC.Address: Duplicate value: \"ipmi://192.168.111.1\"",
 		},
 		{
 			name: "bmc_address_required",
 			platform: platform().
 				Hosts(host1().BMCAddress("").build()).build(),
-			expected: "baremetal.hosts\\[0\\].BMC.Address: Required value: missing Address",
+			expected: "baremetal.Hosts\\[0\\].BMC.Address: Required value: missing Address",
 		},
 		{
 			name: "bmc_username_required",
 			platform: platform().
 				Hosts(host1().BMCUsername("").build()).build(),
-			expected: "baremetal.hosts\\[0\\].BMC.Username: Required value: missing Username",
+			expected: "baremetal.Hosts\\[0\\].BMC.Username: Required value: missing Username",
 		},
 		{
 			name: "bmc_password_required",
 			platform: platform().
 				Hosts(host1().BMCPassword("").build()).build(),
-			expected: "baremetal.hosts\\[0\\].BMC.Password: Required value: missing Password",
+			expected: "baremetal.Hosts\\[0\\].BMC.Password: Required value: missing Password",
 		},
 		{
 			name: "duplicate_host_name",
@@ -246,7 +246,7 @@ func TestValidatePlatform(t *testing.T) {
 				Hosts(
 					host1().Name("host1").build(),
 					host2().Name("host1").build()).build(),
-			expected: "baremetal.hosts\\[1\\].Name: Duplicate value: \"host1\"",
+			expected: "baremetal.Hosts\\[1\\].Name: Duplicate value: \"host1\"",
 		},
 		{
 			name: "duplicate_host_mac",
@@ -254,19 +254,19 @@ func TestValidatePlatform(t *testing.T) {
 				Hosts(
 					host1().BootMACAddress("CA:FE:CA:FE:CA:FE").build(),
 					host2().BootMACAddress("CA:FE:CA:FE:CA:FE").build()).build(),
-			expected: "baremetal.hosts\\[1\\].BootMACAddress: Duplicate value: \"CA:FE:CA:FE:CA:FE\"",
+			expected: "baremetal.Hosts\\[1\\].BootMACAddress: Duplicate value: \"CA:FE:CA:FE:CA:FE\"",
 		},
 		{
 			name: "missing_name",
 			platform: platform().
 				Hosts(host1().Name("").build()).build(),
-			expected: "baremetal.hosts\\[0\\].Name: Required value: missing Name",
+			expected: "baremetal.Hosts\\[0\\].Name: Required value: missing Name",
 		},
 		{
 			name: "missing_mac",
 			platform: platform().
 				Hosts(host1().BootMACAddress("").build()).build(),
-			expected: "baremetal.hosts\\[0\\].BootMACAddress: Required value: missing BootMACAddress",
+			expected: "baremetal.Hosts\\[0\\].BootMACAddress: Required value: missing BootMACAddress",
 		},
 	}
 
