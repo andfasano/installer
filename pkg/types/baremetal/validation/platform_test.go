@@ -53,6 +53,7 @@ func TestValidatePlatform(t *testing.T) {
 		name     string
 		platform *baremetal.Platform
 		expected string
+		config   *types.InstallConfig
 	}{
 		{
 			name:     "valid",
@@ -268,11 +269,40 @@ func TestValidatePlatform(t *testing.T) {
 				Hosts(host1().BootMACAddress("").build()).build(),
 			expected: "baremetal.Hosts\\[0\\].BootMACAddress: Required value: missing BootMACAddress",
 		},
+		{
+			name: "toofew_hosts",
+			config: installConfig().
+				BareMetalPlatform(
+					platform().Hosts(
+						host1().build()).build()).
+				ControlPlane(
+					machinePool().Replicas(3).build()).
+				Compute(
+					*machinePool().Replicas(2).build(),
+					*machinePool().Replicas(3).build()).build(),
+			expected: "baremetal.Hosts: Required value: not enough hosts found \\(1\\) to support all the configured ControlPlane and Compute replicas \\(8\\)",
+		},
+		{
+			name: "enough_hosts",
+			config: installConfig().
+				BareMetalPlatform(
+					platform().Hosts(
+						host1().build(),
+						host2().build()).build()).
+				ControlPlane(
+					machinePool().Replicas(2).build()).build(),
+		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			err := ValidatePlatform(tc.platform, network(), field.NewPath("baremetal"), installConfig(tc.platform).build()).ToAggregate()
+			//Build default wrapping installConfig
+			if tc.config == nil {
+				tc.config = installConfig().BareMetalPlatform(tc.platform).build()
+			}
+
+			err := ValidatePlatform(tc.config.BareMetal, network(), field.NewPath("baremetal"), tc.config).ToAggregate()
+
 			if tc.expected == "" {
 				assert.NoError(t, err)
 			} else {
@@ -446,16 +476,48 @@ type installConfigBuilder struct {
 	types.InstallConfig
 }
 
-func installConfig(bp *baremetal.Platform) *installConfigBuilder {
+func installConfig() *installConfigBuilder {
 	return &installConfigBuilder{
-		InstallConfig: types.InstallConfig{
-			Platform: types.Platform{
-				BareMetal: bp,
-			},
-		},
+		InstallConfig: types.InstallConfig{},
 	}
 }
 
 func (icb *installConfigBuilder) build() *types.InstallConfig {
 	return &icb.InstallConfig
+}
+
+func (icb *installConfigBuilder) BareMetalPlatform(platform *baremetal.Platform) *installConfigBuilder {
+	icb.InstallConfig.Platform = types.Platform{
+		BareMetal: platform,
+	}
+	return icb
+}
+
+func (icb *installConfigBuilder) ControlPlane(machine *types.MachinePool) *installConfigBuilder {
+	icb.InstallConfig.ControlPlane = machine
+	return icb
+}
+
+func (icb *installConfigBuilder) Compute(value ...types.MachinePool) *installConfigBuilder {
+	icb.InstallConfig.Compute = value
+	return icb
+}
+
+type machinePoolBuilder struct {
+	types.MachinePool
+}
+
+func machinePool() *machinePoolBuilder {
+	return &machinePoolBuilder{
+		MachinePool: types.MachinePool{},
+	}
+}
+
+func (mpb *machinePoolBuilder) build() *types.MachinePool {
+	return &mpb.MachinePool
+}
+
+func (mpb *machinePoolBuilder) Replicas(count int64) *machinePoolBuilder {
+	mpb.MachinePool.Replicas = &count
+	return mpb
 }

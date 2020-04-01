@@ -172,6 +172,8 @@ func registerValidationFunctions(validate *validator.Validate) {
 
 	validate.RegisterValidationCtx("hostscount", func(ctx context.Context, fl validator.FieldLevel) bool {
 		installConfig := ctx.Value(key).(validationContext).config
+		customErrs := ctx.Value(key).(validationContext).customErrs
+
 		hostsNum := int64(fl.Field().Len())
 		counter := int64(0)
 
@@ -182,6 +184,9 @@ func registerValidationFunctions(validate *validator.Validate) {
 		}
 		if installConfig.ControlPlane != nil && installConfig.ControlPlane.Replicas != nil {
 			counter += *installConfig.ControlPlane.Replicas
+		}
+		if hostsNum < counter {
+			customErrs[fl.FieldName()] = fmt.Errorf("not enough hosts found (%v) to support all the configured ControlPlane and Compute replicas (%v)", hostsNum, counter)
 		}
 
 		return hostsNum >= counter
@@ -218,7 +223,7 @@ func validateWithTags(p *baremetal.Platform, fldPath *field.Path, c *types.Insta
 			case "urlexist":
 				fieldErr = field.NotFound(childName, err.Value())
 			case "hostscount":
-				fieldErr = field.Invalid(childName, err.Value(), "not enough hosts for the configured replicas!")
+				fieldErr = field.Required(childName, ctx.customErrs[err.Field()].Error())
 			}
 
 			if fieldErr != nil {
