@@ -129,11 +129,7 @@ type validationContext struct {
 	customErrs   map[string]error
 }
 
-func validateWithTags(p *baremetal.Platform, fldPath *field.Path, c *types.InstallConfig) field.ErrorList {
-	platformErrs := field.ErrorList{}
-
-	validate := validator.New()
-
+func registerValidationFunctions(validate *validator.Validate) {
 	validate.RegisterValidationCtx("uniqueField", func(ctx context.Context, fl validator.FieldLevel) bool {
 		values := ctx.Value(key).(validationContext).uniqueValues
 
@@ -156,6 +152,7 @@ func validateWithTags(p *baremetal.Platform, fldPath *field.Path, c *types.Insta
 
 		return !valueFound
 	})
+
 	validate.RegisterValidationCtx("osimageuri", func(ctx context.Context, fl validator.FieldLevel) bool {
 		customErrs := ctx.Value(key).(validationContext).customErrs
 
@@ -165,12 +162,14 @@ func validateWithTags(p *baremetal.Platform, fldPath *field.Path, c *types.Insta
 		}
 		return err == nil
 	})
+
 	validate.RegisterValidationCtx("urlexist", func(ctx context.Context, fl validator.FieldLevel) bool {
 		if res, err := http.Head(fl.Field().String()); err == nil {
 			return res.StatusCode == http.StatusOK
 		}
 		return false
 	})
+
 	validate.RegisterValidationCtx("hostscount", func(ctx context.Context, fl validator.FieldLevel) bool {
 		installConfig := ctx.Value(key).(validationContext).config
 		hostsNum := int64(fl.Field().Len())
@@ -182,11 +181,19 @@ func validateWithTags(p *baremetal.Platform, fldPath *field.Path, c *types.Insta
 			}
 		}
 		if installConfig.ControlPlane != nil && installConfig.ControlPlane.Replicas != nil {
-			counter += *c.ControlPlane.Replicas
+			counter += *installConfig.ControlPlane.Replicas
 		}
 
 		return hostsNum >= counter
 	})
+}
+
+func validateWithTags(p *baremetal.Platform, fldPath *field.Path, c *types.InstallConfig) field.ErrorList {
+	platformErrs := field.ErrorList{}
+
+	validate := validator.New()
+
+	registerValidationFunctions(validate)
 
 	ctx := validationContext{
 		config:       c,
@@ -199,17 +206,23 @@ func validateWithTags(p *baremetal.Platform, fldPath *field.Path, c *types.Insta
 		baseType := reflect.TypeOf(p).Elem().Name()
 		for _, err := range err.(validator.ValidationErrors) {
 			childName := fldPath.Child(err.Namespace()[len(baseType)+1:])
+			var fieldErr *field.Error
+
 			switch err.Tag() {
 			case "required":
-				platformErrs = append(platformErrs, field.Required(childName, "missing "+err.Field()))
+				fieldErr = field.Required(childName, "missing "+err.Field())
 			case "uniqueField":
-				platformErrs = append(platformErrs, field.Duplicate(childName, err.Value()))
+				fieldErr = field.Duplicate(childName, err.Value())
 			case "osimageuri":
-				platformErrs = append(platformErrs, field.Invalid(childName, err.Value(), ctx.customErrs[err.Field()].Error()))
+				fieldErr = field.Invalid(childName, err.Value(), ctx.customErrs[err.Field()].Error())
 			case "urlexist":
-				platformErrs = append(platformErrs, field.NotFound(childName, err.Value()))
+				fieldErr = field.NotFound(childName, err.Value())
 			case "hostscount":
-				platformErrs = append(platformErrs, field.Invalid(childName, err.Value(), "not enough hosts for the configured replicas!"))
+				fieldErr = field.Invalid(childName, err.Value(), "not enough hosts for the configured replicas!")
+			}
+
+			if fieldErr != nil {
+				platformErrs = append(platformErrs, fieldErr)
 			}
 		}
 	}
