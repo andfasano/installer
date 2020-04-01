@@ -66,57 +66,6 @@ func validateOSImageURI(uri string) error {
 	return nil
 }
 
-// validateHosts checks that hosts have all required fields set with appropriate values
-func validateHosts(hosts []*baremetal.Host, fldPath *field.Path) field.ErrorList {
-	hostErrs := field.ErrorList{}
-
-	values := make(map[string]map[interface{}]struct{})
-
-	//Initialize a new validator and register a custom validation rule for the tag `uniqueField`
-	validate := validator.New()
-	validate.RegisterValidation("uniqueField", func(fl validator.FieldLevel) bool {
-		valueFound := false
-		fieldName := fl.Parent().Type().Name() + "." + fl.FieldName()
-		fieldValue := fl.Field().Interface()
-
-		if fl.Field().Type().Comparable() {
-			if _, present := values[fieldName]; !present {
-				values[fieldName] = make(map[interface{}]struct{})
-			}
-
-			fieldValues := values[fieldName]
-			if _, valueFound = fieldValues[fieldValue]; !valueFound {
-				fieldValues[fieldValue] = struct{}{}
-			}
-		} else {
-			panic(fmt.Sprintf("Cannot apply validation rule 'uniqueField' on field %s", fl.FieldName()))
-		}
-
-		return !valueFound
-	})
-
-	//Apply validations and translate errors
-	fldPath = fldPath.Child("hosts")
-
-	for idx, host := range hosts {
-		err := validate.Struct(host)
-		if err != nil {
-			hostType := reflect.TypeOf(hosts).Elem().Elem().Name()
-			for _, err := range err.(validator.ValidationErrors) {
-				childName := fldPath.Index(idx).Child(err.Namespace()[len(hostType)+1:])
-				switch err.Tag() {
-				case "required":
-					hostErrs = append(hostErrs, field.Required(childName, "missing "+err.Field()))
-				case "uniqueField":
-					hostErrs = append(hostErrs, field.Duplicate(childName, err.Value()))
-				}
-			}
-		}
-	}
-
-	return hostErrs
-}
-
 type contextKey int
 
 const (
