@@ -66,6 +66,26 @@ func validateOSImageURI(uri string) error {
 	return nil
 }
 
+func validateHostsCount(hosts []*baremetal.Host, installConfig *types.InstallConfig) error {
+
+	hostsNum := int64(len(hosts))
+	counter := int64(0)
+
+	for _, worker := range installConfig.Compute {
+		if worker.Replicas != nil {
+			counter += *worker.Replicas
+		}
+	}
+	if installConfig.ControlPlane != nil && installConfig.ControlPlane.Replicas != nil {
+		counter += *installConfig.ControlPlane.Replicas
+	}
+	if hostsNum < counter {
+		return fmt.Errorf("not enough hosts found (%v) to support all the configured ControlPlane and Compute replicas (%v)", hostsNum, counter)
+	}
+
+	return nil
+}
+
 type contextKey int
 
 const (
@@ -73,7 +93,6 @@ const (
 )
 
 type validationContext struct {
-	config       *types.InstallConfig
 	uniqueValues map[string]map[interface{}]struct{}
 	customErrs   map[string]error
 }
@@ -118,31 +137,9 @@ func registerValidationFunctions(validate *validator.Validate) {
 		}
 		return false
 	})
-
-	validate.RegisterValidationCtx("hostscount", func(ctx context.Context, fl validator.FieldLevel) bool {
-		installConfig := ctx.Value(key).(validationContext).config
-		customErrs := ctx.Value(key).(validationContext).customErrs
-
-		hostsNum := int64(fl.Field().Len())
-		counter := int64(0)
-
-		for _, worker := range installConfig.Compute {
-			if worker.Replicas != nil {
-				counter += *worker.Replicas
-			}
-		}
-		if installConfig.ControlPlane != nil && installConfig.ControlPlane.Replicas != nil {
-			counter += *installConfig.ControlPlane.Replicas
-		}
-		if hostsNum < counter {
-			customErrs[fl.FieldName()] = fmt.Errorf("not enough hosts found (%v) to support all the configured ControlPlane and Compute replicas (%v)", hostsNum, counter)
-		}
-
-		return hostsNum >= counter
-	})
 }
 
-func validateWithTags(p *baremetal.Platform, fldPath *field.Path, c *types.InstallConfig) field.ErrorList {
+func validateWithTags(p *baremetal.Platform, fldPath *field.Path) field.ErrorList {
 	platformErrs := field.ErrorList{}
 
 	validate := validator.New()
@@ -150,7 +147,6 @@ func validateWithTags(p *baremetal.Platform, fldPath *field.Path, c *types.Insta
 	registerValidationFunctions(validate)
 
 	ctx := validationContext{
-		config:       c,
 		uniqueValues: make(map[string]map[interface{}]struct{}),
 		customErrs:   make(map[string]error),
 	}
@@ -171,8 +167,6 @@ func validateWithTags(p *baremetal.Platform, fldPath *field.Path, c *types.Insta
 				fieldErr = field.Invalid(childName, err.Value(), ctx.customErrs[err.Field()].Error())
 			case "urlexist":
 				fieldErr = field.NotFound(childName, err.Value())
-			case "hostscount":
-				fieldErr = field.Required(childName, ctx.customErrs[err.Field()].Error())
 			}
 
 			if fieldErr != nil {
@@ -268,8 +262,11 @@ func ValidatePlatform(p *baremetal.Platform, n *types.Networking, fldPath *field
 	if err := validateIPNotinMachineCIDR(p.BootstrapProvisioningIP, n); err != nil {
 		allErrs = append(allErrs, field.Invalid(fldPath.Child("bootstrapHostIP"), p.BootstrapProvisioningIP, err.Error()))
 	}
+	if err := validateHostsCount(p.Hosts, c); err != nil {
+		allErrs = append(allErrs, field.Required(fldPath.Child("Hosts"), err.Error()))
+	}
 
-	allErrs = append(allErrs, validateWithTags(p, fldPath, c)...)
+	allErrs = append(allErrs, validateWithTags(p, fldPath)...)
 
 	for _, validator := range dynamicValidators {
 		allErrs = append(allErrs, validator(p, fldPath)...)
